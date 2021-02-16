@@ -15,6 +15,7 @@ import urllib.request
 import zipfile
 from typing import Optional, Any, IO, List
 from urllib import error
+from microvmi import Microvmi
 
 from volatility3 import framework
 from volatility3.framework import constants
@@ -70,6 +71,7 @@ class ResourceAccessor(object):
         self._progress_callback = progress_callback
         self._context = context
         self._handlers = list(framework.class_subclasses(urllib.request.BaseHandler))
+
         if self.list_handlers:
             vollog.log(constants.LOGLEVEL_VVV,
                        "Available URL handlers: {}".format(", ".join([x.__name__ for x in self._handlers])))
@@ -248,3 +250,39 @@ class JarHandler(VolatilityHandler):
             zippath, filepath = zipsplit
             return zipfile.ZipFile(zippath).open(filepath)
         return None
+
+
+micro: Optional[Microvmi] = None
+
+class VMIHandler(VolatilityHandler):
+    """Handles the Virtual Machine Introspection URL scheme
+
+    Syntax is defined here:
+    vmi://<hypervisor>/<vm_name>?param1=value1&param2=value2
+    """
+    SCHEMA = 'vmi'
+
+    @classmethod
+    def non_cached_schemes(cls) -> List[str]:
+        return [VMIHandler.SCHEMA]
+
+    @staticmethod
+    def default_open(req: urllib.request.Request) -> Optional[Any]:
+        """Handles the request if it's the VMI scheme"""
+        if req.type != VMIHandler.SCHEMA:
+            return None
+        # this method is called multiple times
+        # just return if initialized instance
+        global micro
+        if micro is not None:
+            return micro.padded_memory
+        logging.getLogger("microvmi").setLevel(logging.WARNING)
+        # handle hypervisor
+        hypervisor: Optional[str] = req.host
+        parsed_url = urllib.parse.urlparse(req.full_url)
+        vm_name = parsed_url.path[1:]   # remove /
+        if not vm_name:
+            vollog.log(constants.LOGLEVEL_VVV, "A vm_name is required")
+            return None
+        micro = Microvmi(vm_name)
+        return micro.padded_memory
