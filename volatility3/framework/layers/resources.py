@@ -15,7 +15,7 @@ import urllib.request
 import zipfile
 from typing import Optional, Any, IO, List
 from urllib import error
-from microvmi import Microvmi
+from microvmi import Microvmi, DriverInitParam
 
 from volatility3 import framework
 from volatility3.framework import constants
@@ -262,6 +262,10 @@ class VMIHandler(VolatilityHandler):
     """
     SCHEMA = 'vmi'
 
+    DRIVER_INIT_PARAM_MAP = {
+        'kvmi_unix_socket': DriverInitParam.kvmi_unix_socket
+    }
+
     @classmethod
     def non_cached_schemes(cls) -> List[str]:
         return [VMIHandler.SCHEMA]
@@ -272,7 +276,7 @@ class VMIHandler(VolatilityHandler):
         if req.type != VMIHandler.SCHEMA:
             return None
         # this method is called multiple times
-        # just return if initialized instance
+        # just return if already initialized instance
         global micro
         if micro is not None:
             return micro.padded_memory
@@ -280,9 +284,24 @@ class VMIHandler(VolatilityHandler):
         # handle hypervisor
         hypervisor: Optional[str] = req.host
         parsed_url = urllib.parse.urlparse(req.full_url)
+        # vm_name
         vm_name = parsed_url.path[1:]   # remove /
         if not vm_name:
             vollog.log(constants.LOGLEVEL_VVV, "A vm_name is required")
             return None
-        micro = Microvmi(vm_name)
+        # init parameters
+        url_params = urllib.parse.parse_qs(parsed_url.query, strict_parsing=True)
+        if len(url_params) > 1:
+            raise ValueError("Only one driver initialization parameter is supported")
+        init_param: Optional[DriverInitParam] = None
+        if url_params:
+            try:
+                key = list(url_params.keys())[0]
+                init_param_func = VMIHandler.DRIVER_INIT_PARAM_MAP[key]
+            except KeyError as e:
+                raise KeyError("Unknown driver initialization parameter") from e
+            else:
+                init_param = init_param_func(url_params[key][0])
+        # init Microvmi
+        micro = Microvmi(vm_name, None, init_param)
         return micro.padded_memory
