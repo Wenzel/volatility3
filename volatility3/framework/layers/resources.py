@@ -15,7 +15,7 @@ import urllib.request
 import zipfile
 from typing import Optional, Any, IO, List
 from urllib import error
-from microvmi import Microvmi, DriverInitParam
+from microvmi import Microvmi, DriverType, DriverInitParam
 
 from volatility3 import framework
 from volatility3.framework import constants
@@ -283,6 +283,12 @@ class VMIHandler(VolatilityHandler):
         logging.getLogger("microvmi").setLevel(logging.WARNING)
         # handle hypervisor
         hypervisor: Optional[str] = req.host
+        drv_type: Optional[DriverType] = None
+        if hypervisor:
+            try:
+                drv_type = DriverType[hypervisor]
+            except KeyError as e:
+                raise ValueError(f"Unknown driver type {hypervisor}") from e
         parsed_url = urllib.parse.urlparse(req.full_url)
         # vm_name
         vm_name = parsed_url.path[1:]   # remove /
@@ -303,5 +309,5 @@ class VMIHandler(VolatilityHandler):
             else:
                 init_param = init_param_func(url_params[key][0])
         # init Microvmi
-        micro = Microvmi(vm_name, None, init_param)
+        micro = Microvmi(vm_name, drv_type, init_param)
         return micro.padded_memory
