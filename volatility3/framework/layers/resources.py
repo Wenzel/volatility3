@@ -295,19 +295,20 @@ class VMIHandler(VolatilityHandler):
         if not vm_name:
             vollog.log(constants.LOGLEVEL_VVV, "A vm_name is required")
             return None
-        # init parameters
-        url_params = urllib.parse.parse_qs(parsed_url.query, strict_parsing=True)
-        if len(url_params) > 1:
-            raise ValueError("Only one driver initialization parameter is supported")
         init_param: Optional[DriverInitParam] = None
-        if url_params:
-            try:
-                key = list(url_params.keys())[0]
-                init_param_func = VMIHandler.DRIVER_INIT_PARAM_MAP[key]
-            except KeyError as e:
-                raise KeyError("Unknown driver initialization parameter") from e
-            else:
-                init_param = init_param_func(url_params[key][0])
+        if parsed_url.query:
+            # init parameters
+            url_params = urllib.parse.parse_qs(parsed_url.query, strict_parsing=True)
+            if len(url_params) > 1:
+                raise ValueError("Only one driver initialization parameter is supported")
+            if url_params:
+                try:
+                    key = list(url_params.keys())[0]
+                    init_param_func = VMIHandler.DRIVER_INIT_PARAM_MAP[key]
+                except KeyError as e:
+                    raise KeyError("Unknown driver initialization parameter") from e
+                else:
+                    init_param = init_param_func(url_params[key][0])
         # init Microvmi
         micro = Microvmi(vm_name, drv_type, init_param)
         return micro.padded_memory
